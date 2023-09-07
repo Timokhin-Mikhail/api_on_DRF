@@ -27,8 +27,8 @@ from api.models import Profile, Category, Tag, Payment, Product, Review, Baskets
 class ProfileList(APIView):
 
     def get(self, request):
-        user = Profile.objects.select_related('user').get(user=request.user)
-        serializer = ProfileSerializer(user)
+        user = Profile.objects.select_related('user').filter(user=request.user)
+        serializer = ProfileSerializer(user, many=True)
         return Response(serializer.data)
 
     def post(self, request):
@@ -167,33 +167,33 @@ class ProductFilter(SearchFilter):
         return queryset
 
 
-class ProductWithIdFilter(SearchFilter):
-
-    def filter_queryset(self, request, queryset, view):
-        search_fields = self.get_search_fields(view, request)
-        search_terms = self.get_search_terms(request)
-        conditions = []
-        queries = [Q(**{LOOKUP_SEP.join(['category__id', 'iexact']): str(view.kwargs['id'])})]
-        conditions.append(reduce(operator.and_, queries))
-        base = queryset
-        if search_fields and search_terms:
-            orm_lookups = [
-                self.construct_search(str(search_field))
-                for search_field in search_fields
-            ]
-
-            for search_term in search_terms:
-                queries = [
-                    Q(**{orm_lookup: search_term})
-                    for orm_lookup in orm_lookups
-                ]
-                conditions.append(reduce(operator.or_, queries))
-
-        queryset = queryset.filter(reduce(operator.and_, conditions))
-
-        if self.must_call_distinct(queryset, search_fields):
-            queryset = distinct(queryset, base)
-        return queryset
+# class ProductWithIdFilter(SearchFilter):
+#
+#     def filter_queryset(self, request, queryset, view):
+#         search_fields = self.get_search_fields(view, request)
+#         search_terms = self.get_search_terms(request)
+#         conditions = []
+#         queries = [Q(**{LOOKUP_SEP.join(['category__id', 'iexact']): str(view.kwargs['id'])})]
+#         conditions.append(reduce(operator.and_, queries))
+#         base = queryset
+#         if search_fields and search_terms:
+#             orm_lookups = [
+#                 self.construct_search(str(search_field))
+#                 for search_field in search_fields
+#             ]
+#
+#             for search_term in search_terms:
+#                 queries = [
+#                     Q(**{orm_lookup: search_term})
+#                     for orm_lookup in orm_lookups
+#                 ]
+#                 conditions.append(reduce(operator.or_, queries))
+#
+#         queryset = queryset.filter(reduce(operator.and_, conditions))
+#
+#         if self.must_call_distinct(queryset, search_fields):
+#             queryset = distinct(queryset, base)
+#         return queryset
 
 
 class ProductsCatalogViewSet(ProductsViewSet):
@@ -206,10 +206,17 @@ class ProductsCatalogViewSet(ProductsViewSet):
 
 class ProductsCatalogWithIdViewSet(ProductsViewSet):
     pagination_class = PaginationProduct
-    filter_backends = [ProductWithIdFilter, MyOrdering]
+    filter_backends = [ProductFilter, MyOrdering]
     search_fields = ['title']
     ordering_fields = ['rating', 'price', 'reviews', 'date']
     ordering = ['-date']
+
+    def get_queryset(self):
+        products =Product.objects.prefetch_related('reviews').filter(category=self.request.parser_context['kwargs']['id']). \
+            annotate(href=Concat(Value('/catalog/'), 'id', output_field=CharField()),
+                     rating=Coalesce(Round(Avg('reviews__rate'), 1), 0.0))
+
+        return products
 
 
 class ProductsPopularViewSet(ReadOnlyModelViewSet):

@@ -1,5 +1,5 @@
 asgiref==3.6.0
-./diploma-frontend-0.2.tar.gz
+./diploma-frontend-0.6.tar.gz
 Django==4.1.7
 djangorestframework==3.14.0
 Pillow==9.5.0
